@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101729">
+  <title>AgencyOS · Controle</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header><div class="brand"><span class="mark">A</span><div><strong>AgencyOS</strong><small>Controle da agência</small></div></div><button id="logout" class="secondary hidden">Sair</button></header>
+  <main>
+    <section id="loginPanel" class="card login">
+      <p class="eyebrow">ACESSO SEGURO</p><h1>Entre para operar</h1>
+      <form id="loginForm"><label>Usuário<input name="username" autocomplete="username" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button>Entrar</button></form>
+    </section>
+    <div id="app" class="hidden">
+      <section class="hero"><p class="eyebrow">PAINEL DE OPERAÇÃO</p><h1>Da oportunidade à entrega</h1><p>Registre trabalho, prepare uma proposta, aprove e acompanhe a execução com evidências.</p></section>
+      <nav aria-label="Seções"><button data-tab="pipeline" class="selected">Pipeline</button><button data-tab="approvals">Aprovações</button><button data-tab="projects">Projetos</button><button data-tab="activity">Atividade</button></nav>
+      <section id="pipeline" class="tab">
+        <div class="stats" id="stats"></div>
+        <details class="card" open><summary>Adicionar oportunidade</summary><form id="opportunityForm" class="grid"><label>Título<input name="title" maxlength="200" required placeholder="Ex.: revisão de site"></label><label>Fonte<input name="source" maxlength="100" required placeholder="VintePila, indicação, inbound..."></label><label>Link da fonte<input name="source_url" type="url" placeholder="https://..."></label><label>Moeda<select name="currency"><option>BRL</option><option>GBP</option><option>USD</option><option>EUR</option></select></label><label>Orçamento informado<input name="budget" type="number" min="0" step="0.01" placeholder="Opcional"></label><label class="full">Notas<textarea name="notes" maxlength="2000" rows="2"></textarea></label><button>Registrar oportunidade</button></form></details>
+        <h2>Oportunidades</h2><div id="opportunities" class="cards"></div>
+      </section>
+      <section id="approvals" class="tab hidden"><h2>Aprovações pendentes</h2><div id="approvalList" class="cards"></div><h2>Propostas</h2><div id="proposals" class="cards"></div></section>
+      <section id="projects" class="tab hidden"><details class="card"><summary>Adicionar cliente</summary><form id="clientForm" class="grid"><label>Nome<input name="name" required maxlength="200"></label><label>Site<input name="website" type="url" placeholder="https://..."></label><label class="full">Notas<textarea name="notes" maxlength="2000"></textarea></label><button>Registrar cliente</button></form></details><h2>Projetos e tarefas</h2><div id="projectList" class="cards"></div></section>
+      <section id="activity" class="tab hidden"><h2>Trilha de eventos</h2><div id="events" class="cards"></div><h2>Execuções e evidências</h2><div id="runs" class="cards"></div></section>
+    </div>
+    <p id="notice" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>
