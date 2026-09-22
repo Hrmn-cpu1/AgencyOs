@@ -226,8 +226,8 @@ class Agency:
             opportunity = self.one('SELECT * FROM opportunities WHERE id=?', (opportunity_id,))
             if not opportunity:
                 raise Problem('oportunidade não encontrada', 404)
-            if opportunity['status'] == 'converted':
-                raise Problem('oportunidade já convertida', 409)
+            if opportunity['status'] in ('approved', 'converted'):
+                raise Problem('oportunidade já aprovada ou convertida', 409)
             if self.one("SELECT approvals.id FROM approvals JOIN proposals ON proposals.id=approvals.subject_id WHERE proposals.opportunity_id=? AND approvals.status='pending'", (opportunity_id,)):
                 raise Problem('já existe proposta pendente', 409)
             run_id, proposal_id, approval_id = uid(), uid(), uid()
@@ -246,6 +246,8 @@ class Agency:
                             ('completed', encoded(result.output), now(), run_id))
             self.db.execute('INSERT INTO proposals VALUES(?,?,?,?,?,?)',
                             (proposal_id, opportunity_id, result.output['content'], 'pending', now(), None))
+            self.db.execute('INSERT INTO proposal_revisions VALUES(?,?,?,?,?)',
+                            (uid(), proposal_id, result.output['content'], actor, now()))
             self.db.execute("UPDATE opportunities SET status='drafted' WHERE id=?", (opportunity_id,))
             self.db.execute('INSERT INTO approvals VALUES(?,?,?,?,?,?,?,?,?,?)',
                             (approval_id, 'proposal', proposal_id, 'human_approval_before_external_send',
@@ -254,6 +256,24 @@ class Agency:
             self.event('proposal.generated', actor, 'proposal', proposal_id, {'run_id': run_id})
             self.event('approval.requested', actor, 'approval', approval_id, {'proposal_id': proposal_id})
         return {'id': proposal_id, 'approval_id': approval_id, 'run_id': run_id}
+
+    def revise_proposal(self, actor, proposal_id, data):
+        content = require_text(data, 'content', 10000)
+        with self.transaction():
+            proposal = self.one('SELECT * FROM proposals WHERE id=?', (proposal_id,))
+            if not proposal:
+                raise Problem('proposta não encontrada', 404)
+            if proposal['status'] != 'pending':
+                raise Problem('só é possível editar uma proposta pendente', 409)
+            if proposal['content'] == content:
+                raise Problem('nenhuma alteração no conteúdo', 409)
+            self.db.execute('UPDATE proposals SET content=? WHERE id=?', (content, proposal_id))
+            self.db.execute('INSERT INTO proposal_revisions VALUES(?,?,?,?,?)',
+                            (uid(), proposal_id, content, actor, now()))
+            self.evidence(None, 'proposal', proposal_id, 'human_revision',
+                          {'actor_id': actor, 'sha256': hashlib.sha256(content.encode()).hexdigest()})
+            self.event('proposal.revised', actor, 'proposal', proposal_id)
+        return {'id': proposal_id, 'status': 'pending'}
 
     def decide(self, actor, approval_id, decision, reason=''):
         if decision not in ('approved', 'rejected'):
@@ -280,23 +300,74 @@ class Agency:
             self.event('proposal.' + decision, actor, 'proposal', approval['subject_id'])
         return {'status': decision}
 
+    def record_dispatch(self, actor, proposal_id, data):
+        channel = require_text(data, 'channel', 100)
+        reference = require_text(data, 'reference', 1000)
+        with self.transaction():
+            proposal = self.one('SELECT * FROM proposals WHERE id=?', (proposal_id,))
+            if not proposal:
+                raise Problem('proposta não encontrada', 404)
+            if proposal['status'] != 'approved':
+                raise Problem('proposta precisa estar aprovada', 409)
+            if self.one('SELECT id FROM proposal_dispatches WHERE proposal_id=?', (proposal_id,)):
+                raise Problem('envio já registrado', 409)
+            dispatch_id = uid()
+            self.db.execute('INSERT INTO proposal_dispatches VALUES(?,?,?,?,?,?)',
+                            (dispatch_id, proposal_id, channel, reference, actor, now()))
+            self.evidence(None, 'proposal', proposal_id, 'manual_dispatch',
+                          {'channel': channel, 'reference': reference, 'actor_id': actor})
+            self.event('proposal.dispatch_recorded', actor, 'proposal', proposal_id,
+                       {'dispatch_id': dispatch_id, 'channel': channel})
+        return {'id': dispatch_id}
+
+    def confirm_sale(self, actor, opportunity_id, data):
+        client_id = require_text(data, 'client_id', 32)
+        confirmation = require_text(data, 'confirmation', 2000)
+        amount = data.get('amount_minor')
+        if amount is not None and (type(amount) is not int or not 0 <= amount <= 10**12):
+            raise Problem('amount_minor precisa ser inteiro não negativo')
+        with self.transaction():
+            opportunity = self.one('SELECT * FROM opportunities WHERE id=?', (opportunity_id,))
+            if not opportunity:
+                raise Problem('oportunidade não encontrada', 404)
+            if opportunity['status'] != 'approved':
+                raise Problem('oportunidade precisa ter proposta aprovada', 409)
+            if not self.one('SELECT id FROM clients WHERE id=?', (client_id,)):
+                raise Problem('cliente não encontrado', 404)
+            proposal = self.one('''SELECT proposals.id FROM proposals JOIN proposal_dispatches
+                                   ON proposals.id=proposal_dispatches.proposal_id
+                                   WHERE proposals.opportunity_id=? AND proposals.status='approved'
+                                   ORDER BY proposal_dispatches.created_at DESC LIMIT 1''', (opportunity_id,))
+            if not proposal:
+                raise Problem('registre o envio manual da proposta antes de confirmar a venda', 409)
+            if self.one('SELECT id FROM sales WHERE opportunity_id=?', (opportunity_id,)):
+                raise Problem('venda já confirmada', 409)
+            sale_id = uid()
+            self.db.execute('INSERT INTO sales VALUES(?,?,?,?,?,?,?,?,?)',
+                            (sale_id, opportunity_id, proposal['id'], client_id, confirmation,
+                             amount, opportunity['currency'], actor, now()))
+            self.evidence(None, 'sale', sale_id, 'human_confirmation',
+                          {'confirmation': confirmation, 'actor_id': actor})
+            self.event('sale.confirmed', actor, 'sale', sale_id,
+                       {'opportunity_id': opportunity_id, 'proposal_id': proposal['id']})
+        return {'id': sale_id}
+
     def create_project(self, actor, opportunity_id, data):
-        client_id = data.get('client_id')
-        if client_id is not None and not isinstance(client_id, str):
-            raise Problem('client_id inválido')
         with self.transaction():
             opportunity = self.one('SELECT * FROM opportunities WHERE id=?', (opportunity_id,))
             if not opportunity:
                 raise Problem('oportunidade não encontrada', 404)
             if opportunity['status'] != 'approved':
                 raise Problem('proposta precisa estar aprovada', 409)
-            if client_id and not self.one('SELECT id FROM clients WHERE id=?', (client_id,)):
-                raise Problem('cliente não encontrado', 404)
+            sale = self.one('SELECT * FROM sales WHERE opportunity_id=?', (opportunity_id,))
+            if not sale:
+                raise Problem('confirme a venda antes de abrir o projeto', 409)
             project_id = uid()
             self.db.execute('INSERT INTO projects VALUES(?,?,?,?,?,?)',
-                            (project_id, opportunity_id, client_id, opportunity['title'], 'active', now()))
+                            (project_id, opportunity_id, sale['client_id'], opportunity['title'], 'active', now()))
             self.db.execute("UPDATE opportunities SET status='converted' WHERE id=?", (opportunity_id,))
-            self.event('project.created', actor, 'project', project_id, {'opportunity_id': opportunity_id})
+            self.event('project.created', actor, 'project', project_id,
+                       {'opportunity_id': opportunity_id, 'sale_id': sale['id']})
         return {'id': project_id}
 
     def create_task(self, actor, project_id, data):
@@ -327,7 +398,9 @@ class Agency:
             return {key: self.many(f'SELECT * FROM {table} ORDER BY created_at DESC LIMIT 100') for key, table in (
                 ('opportunities', 'opportunities'), ('proposals', 'proposals'),
                 ('approvals', 'approvals'), ('clients', 'clients'),
-                ('projects', 'projects'), ('tasks', 'tasks'), ('runs', 'runs'))} | {
+                ('projects', 'projects'), ('tasks', 'tasks'), ('runs', 'runs'),
+                ('sales', 'sales'), ('dispatches', 'proposal_dispatches'),
+                ('revisions', 'proposal_revisions'))} | {
                 'events': self.many('SELECT * FROM events ORDER BY id DESC LIMIT 100'),
                 'evidence': self.many('SELECT * FROM evidence ORDER BY created_at DESC LIMIT 100'),
                 'connectors': [{'name': connector.name, 'capabilities': connector.capabilities()} for connector in self.orchestrator.connectors.values()],

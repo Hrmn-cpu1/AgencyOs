@@ -2,9 +2,9 @@
 
 ## Fluxo implementado
 
-`manual connector → opportunity.discovered → sales worker → proposal_draft skill → proposal_template tool → run + evidence → approval.requested → decisão do proprietário → project.created → task.created → task.completed + evidence`
+`manual connector → opportunity.discovered → sales worker → proposal_draft skill → proposal_template tool → run + evidence → revisão humana → aprovação do proprietário → registro de envio manual → confirmação da venda → project.created → task.created → task.completed + evidence`
 
-O Control Plane é a API HTTP + tela responsiva; Worker/Execution Plane é o Orchestrator e seus registros; Connector Plane tem um conector manual real; Policy/Approval Plane bloqueia a conversão em projeto até a aprovação; Evidence/Event Plane mantém registros de entrada, saída, execução e decisão em SQLite. O endpoint `/api/dashboard` alimenta o painel de observabilidade. O domínio guarda moedas como código ISO e valores opcionais em unidades mínimas inteiras. A interface começa em PT-BR; textos precisam ser externalizados antes de oferecer EN/ES. Ações de envio, publicação e gasto não existem nesta fase, logo não podem disparar por engano.
+O Control Plane é a API HTTP + tela responsiva; Worker/Execution Plane é o Orchestrator e seus registros; Connector Plane tem um conector manual real; Policy/Approval Plane bloqueia a conversão em projeto até a aprovação, registro de envio e confirmação do aceite; Evidence/Event Plane mantém registros de entrada, saída, execução e decisão em SQLite. O endpoint `/api/dashboard` alimenta o painel de observabilidade. O domínio guarda moedas como código ISO e valores opcionais em unidades mínimas inteiras. A interface começa em PT-BR; textos precisam ser externalizados antes de oferecer EN/ES. Ações automáticas de envio, publicação e gasto não existem nesta fase.
 
 ## Limites de extensão
 
@@ -12,7 +12,7 @@ O Control Plane é a API HTTP + tela responsiva; Worker/Execution Plane é o Orc
 
 ## Dados e integridade
 
-`agencyos/schema.sql` modela users, sessions, clients, opportunities, proposals, approvals, projects, tasks, runs, evidence e events. Chaves estrangeiras, unicidade e transações protegem o fluxo. `budget_minor` guarda unidade mínima e não representa receita recebida. Não se presume venda quando uma proposta é aprovada: abrir um projeto é uma ação explícita do operador. O histórico de eventos é append-only na API, sem endpoint de exclusão.
+`agencyos/schema.sql` modela users, sessions, clients, opportunities, proposals, proposal_revisions, approvals, proposal_dispatches, sales, projects, tasks, runs, evidence e events. As novas tabelas usam `CREATE TABLE IF NOT EXISTS` para preservar bancos da primeira versão. Chaves estrangeiras, unicidade e transações protegem o fluxo. `budget_minor` guarda unidade mínima e não representa receita recebida; `sales.amount_minor` é valor declarado e não significa pagamento recebido. A venda exige confirmação expressa, e abrir projeto é uma ação posterior. O histórico de eventos e as revisões são append-only na API, sem endpoint de exclusão.
 
 ## Segurança e produção
 

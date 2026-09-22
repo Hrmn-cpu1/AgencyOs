@@ -126,7 +126,8 @@ def make_handler(agency, secure_cookie=False):
                     self.user()
                     return self.respond(agency.dashboard())
                 if method == 'POST':
-                    action = 'approve' if re.fullmatch(r'/api/approvals/[a-f0-9]{32}/decision', path) else 'write'
+                    action = 'approve' if (re.fullmatch(r'/api/approvals/[a-f0-9]{32}/decision', path)
+                                           or re.fullmatch(r'/api/opportunities/[a-f0-9]{32}/sale', path)) else 'write'
                     user = self.user(action)
                     if self.headers.get('X-CSRF-Token') != user['csrf']:
                         raise Problem('token CSRF inválido', 403)
@@ -141,9 +142,18 @@ def make_handler(agency, secure_cookie=False):
                     match = re.fullmatch(r'/api/opportunities/([a-f0-9]{32})/draft', path)
                     if match:
                         return self.respond(agency.draft_proposal(actor, match[1]), 201)
+                    match = re.fullmatch(r'/api/proposals/([a-f0-9]{32})/revise', path)
+                    if match:
+                        return self.respond(agency.revise_proposal(actor, match[1], data))
                     match = re.fullmatch(r'/api/approvals/([a-f0-9]{32})/decision', path)
                     if match:
                         return self.respond(agency.decide(actor, match[1], data.get('decision'), data.get('reason', '')))
+                    match = re.fullmatch(r'/api/proposals/([a-f0-9]{32})/dispatch', path)
+                    if match:
+                        return self.respond(agency.record_dispatch(actor, match[1], data), 201)
+                    match = re.fullmatch(r'/api/opportunities/([a-f0-9]{32})/sale', path)
+                    if match:
+                        return self.respond(agency.confirm_sale(actor, match[1], data), 201)
                     match = re.fullmatch(r'/api/opportunities/([a-f0-9]{32})/project', path)
                     if match:
                         return self.respond(agency.create_project(actor, match[1], data), 201)

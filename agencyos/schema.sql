@@ -23,6 +23,23 @@ CREATE TABLE IF NOT EXISTS proposals (
  content TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
  created_at TEXT NOT NULL, decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS proposal_revisions (
+ id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL REFERENCES proposals(id),
+ content TEXT NOT NULL, actor_id TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS proposal_revisions_by_proposal ON proposal_revisions(proposal_id,created_at);
+CREATE TABLE IF NOT EXISTS proposal_dispatches (
+ id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL UNIQUE REFERENCES proposals(id),
+ channel TEXT NOT NULL, reference TEXT NOT NULL, actor_id TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sales (
+ id TEXT PRIMARY KEY, opportunity_id TEXT NOT NULL UNIQUE REFERENCES opportunities(id),
+ proposal_id TEXT NOT NULL REFERENCES proposals(id), client_id TEXT NOT NULL REFERENCES clients(id),
+ confirmation TEXT NOT NULL, amount_minor INTEGER CHECK(amount_minor IS NULL OR amount_minor >= 0),
+ currency TEXT NOT NULL, actor_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS projects (
  id TEXT PRIMARY KEY, opportunity_id TEXT NOT NULL UNIQUE REFERENCES opportunities(id),
  client_id TEXT REFERENCES clients(id), title TEXT NOT NULL,
