@@ -7,7 +7,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from agencyos.core import Agency
-from agencyos.server import make_handler
+from agencyos.server import is_local_client, make_handler
 
 
 class HttpFlowTest(unittest.TestCase):
@@ -65,6 +65,29 @@ class HttpFlowTest(unittest.TestCase):
         status, project, _ = self.request('POST',f"/api/opportunities/{opportunity['id']}/project",{},cookie,csrf)
         self.assertEqual(status, 201)
         self.assertTrue(project['id'])
+
+    def test_lan_mode_allows_private_network_and_blocks_public_clients(self):
+        self.assertTrue(is_local_client('192.168.1.42'))
+        self.assertTrue(is_local_client('10.1.2.3'))
+        self.assertTrue(is_local_client('172.20.0.8'))
+        self.assertTrue(is_local_client('127.0.0.1'))
+        self.assertFalse(is_local_client('8.8.8.8'))
+        self.assertFalse(is_local_client('172.32.0.1'))
+        self.assertFalse(is_local_client('invalid'))
+        lan_server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(self.app, lan_test=True))
+        thread = threading.Thread(target=lan_server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            conn = http.client.HTTPConnection('127.0.0.1', lan_server.server_port)
+            conn.request('GET', '/', headers={'Host':f'192.168.1.42:{lan_server.server_port}'})
+            response = conn.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertIn(b'AgencyOS', response.read())
+            conn.close()
+        finally:
+            lan_server.shutdown()
+            thread.join()
+            lan_server.server_close()
 
 
 if __name__ == '__main__':

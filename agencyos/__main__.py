@@ -14,11 +14,13 @@ def main():
     parser.add_argument('--host', default=os.getenv('AGENCYOS_HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.getenv('AGENCYOS_PORT', '8000')))
     parser.add_argument('--username', default='owner')
+    parser.add_argument('--lan-test', action='store_true', help='teste temporário no celular pela mesma rede Wi-Fi')
     args = parser.parse_args()
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     try:
         if args.command == 'serve':
-            serve(args.db, args.host, args.port, os.getenv('AGENCYOS_SECURE_COOKIE') == '1')
+            serve(args.db, '0.0.0.0' if args.lan_test else args.host, args.port,
+                  os.getenv('AGENCYOS_SECURE_COOKIE') == '1', args.lan_test)
         else:
             password = getpass.getpass('Senha do proprietário (mínimo 12 caracteres): ')
             agency = Agency(args.db)

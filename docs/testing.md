@@ -1,6 +1,6 @@
 # Teste funcional local
 
-Esta etapa roda em um computador com Python 3.12; o GitHub guarda o código e executa testes, mas não hospeda a aplicação. O banco criado para este teste fica apenas no computador.
+Esta etapa roda em um computador com Python 3.12; o GitHub guarda o código e executa testes, mas não hospeda a aplicação. O banco criado para este teste fica apenas no computador. Para operar a interface no celular conectado ao mesmo Wi-Fi, veja o [guia móvel](mobile-test.md).
 
 1. Baixe o código do repositório e, na pasta do projeto, execute `python -m agencyos setup --username owner`. Defina uma senha de ao menos 12 caracteres.
 2. Execute `python -m agencyos serve` e abra `http://127.0.0.1:8000` no navegador do mesmo computador.

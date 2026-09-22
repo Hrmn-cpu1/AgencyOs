@@ -30,4 +30,6 @@ python -m unittest discover -s tests -v
 
 ## Acesso pelo celular
 
+Para um teste rápido com o notebook e o celular na mesma rede Wi-Fi, siga [o guia de teste pelo celular](docs/mobile-test.md). O comando `python -m agencyos serve --lan-test` abre somente um modo temporário para a rede local. Use um banco e senha exclusivos de teste, sem dados reais.
+
 Implante em um servidor persistente com HTTPS, proxy reverso e volume para o banco. Configure `AGENCYOS_HOST`, `AGENCYOS_PORT`, `AGENCYOS_DB` e `AGENCYOS_SECURE_COOKIE=1`; configure os backups, monitoramento e restrinja a rede antes de abrir acesso público. **Não exponha a porta HTTP diretamente na internet.** O servidor recusa escutar fora do loopback sem a configuração de cookie seguro. Esta primeira versão é indicada para um único operador e validação controlada; [arquitetura](docs/architecture.md) descreve o caminho para produção.

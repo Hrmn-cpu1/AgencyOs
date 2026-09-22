@@ -1,7 +1,9 @@
 """Small HTTP control plane. Put behind HTTPS before exposing outside localhost."""
 import json
+import ipaddress
 import os
 import re
+import socket
 import threading
 import time
 from http import HTTPStatus
@@ -13,6 +15,26 @@ from urllib.parse import urlsplit
 from .core import Agency, Problem
 
 ROOT = Path(__file__).resolve().parent.parent / 'web'
+LAN_NETWORKS = tuple(ipaddress.ip_network(network) for network in
+                     ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
+
+
+def is_local_client(address):
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    return ip.is_loopback or any(ip in network for network in LAN_NETWORKS)
+
+
+def local_addresses():
+    try:
+        addresses = {item[4][0] for item in socket.getaddrinfo(socket.gethostname(), None,
+                     family=socket.AF_INET)}
+    except OSError:
+        return []
+    return sorted(address for address in addresses if is_local_client(address)
+                  and not ipaddress.ip_address(address).is_loopback)
 
 
 class RateLimit:
@@ -36,7 +58,7 @@ class RateLimit:
             self.attempts.pop(key, None)
 
 
-def make_handler(agency, secure_cookie=False):
+def make_handler(agency, secure_cookie=False, lan_test=False):
     limiter = RateLimit()
 
     class Handler(BaseHTTPRequestHandler):
@@ -92,6 +114,8 @@ def make_handler(agency, secure_cookie=False):
 
         def handle_request(self, method):
             try:
+                if lan_test and not is_local_client(self.client_address[0]):
+                    raise Problem('modo de teste restrito à rede local', 403)
                 path = urlsplit(self.path).path
                 if method == 'GET' and path in ('/', '/app.js', '/style.css'):
                     filename = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[path]
@@ -179,13 +203,19 @@ def make_handler(agency, secure_cookie=False):
     return Handler
 
 
-def serve(db_path, host='127.0.0.1', port=8000, secure_cookie=False):
-    if host not in ('127.0.0.1', 'localhost', '::1') and not secure_cookie:
+def serve(db_path, host='127.0.0.1', port=8000, secure_cookie=False, lan_test=False):
+    if lan_test and (host != '0.0.0.0' or secure_cookie):
+        raise Problem('modo Wi-Fi de teste requer host 0.0.0.0 e sem cookie HTTPS')
+    if host not in ('127.0.0.1', 'localhost', '::1') and not secure_cookie and not lan_test:
         raise Problem('acesso externo exige HTTPS e AGENCYOS_SECURE_COOKIE=1')
     agency = Agency(db_path)
-    server = ThreadingHTTPServer((host, port), make_handler(agency, secure_cookie))
+    server = ThreadingHTTPServer((host, port), make_handler(agency, secure_cookie, lan_test))
     try:
         print(f'AgencyOS escutando em {host}:{server.server_port}', flush=True)
+        if lan_test:
+            for address in local_addresses():
+                print(f'No celular na mesma rede Wi-Fi: http://{address}:{server.server_port}', flush=True)
+            print('Use somente dados fictícios. Se nenhum endereço aparecer, veja o IPv4 em ipconfig.', flush=True)
         server.serve_forever()
     finally:
         server.server_close()

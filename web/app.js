@@ -51,6 +51,10 @@ async function start() {
   } catch { $('loginPanel').classList.remove('hidden'); $('app').classList.add('hidden'); $('logout').classList.add('hidden'); }
 }
 
+if (location.protocol === 'http:' && !['127.0.0.1', 'localhost'].includes(location.hostname)) {
+  $('lanNotice').classList.remove('hidden');
+}
+
 $('loginForm').addEventListener('submit', async event => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
